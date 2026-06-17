@@ -14,22 +14,33 @@ security = HTTPBearer()
 appointments = {}
 next_id = 1
 
-VALID_USERNAME = "admin"
-VALID_PASSWORD = "clinic123"
-VALID_TOKEN = "clinic-secret-token"
+USERS = {
+    "admin": {
+        "password": "clinic123",
+        "role": "clinic_staff",
+        "token": "clinic-secret-token"
+    },
+    "staff": {
+        "password": "staff123",
+        "role": "clinic_assistant",
+        "token": "staff-secret-token"
+    }
+}
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     token = credentials.credentials
 
-    if not compare_digest(token, VALID_TOKEN):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token"
- )
-    return {
-        "username": VALID_USERNAME,
-        "role": "clinic_staff"
- }
+    for username, user in USERS.items():
+        if user["token"] == token:
+            return {
+                "username": username,
+                "role": user["role"]
+            }
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired token"
+    )
 
 @app.get("/")
 def read_root():
@@ -42,20 +53,23 @@ def read_root():
 
 @app.post("/login", response_model=TokenResponse)
 def login(login_data: LoginRequest):
-    username_is_valid = compare_digest(login_data.username, VALID_USERNAME)
-    password_is_valid = compare_digest(login_data.password, VALID_PASSWORD)
+    user = USERS.get(login_data.username)
 
-    if not username_is_valid or not password_is_valid:
+    if not user or user["password"] != login_data.password:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password"
         )
+
     return {
-        "access_token": VALID_TOKEN,
-        "token_type": "bearer"
+        "access_token": user["token"],
+        "token_type": "bearer",
+        "role": user["role"]  
     }
 
 @app.get("/me")
+def get_me(current_user: dict = Depends(verify_token)):
+    return current_user
 
 def get_current_user(current_user: dict = Depends(verify_token)):
     return {
@@ -129,14 +143,25 @@ def update_appointment(appointment_id: int, appointment_update: AppointmentUpdat
         }
 
 @app.delete("/appointments/{appointment_id}")
-
-def cancel_appointment(appointment_id: int, current_user: dict = Depends(verify_token)):
+def cancel_appointment(
+    appointment_id: int,
+    current_user: dict = Depends(verify_token)
+):
+    # Check if appointment exists
     if appointment_id not in appointments:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Appointment not found"
-    )
+        )
 
+    # ROLE CHECK (CHALLENGE 3 REQUIREMENT)
+    if current_user["role"] != "clinic_staff":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only clinic staff may cancel appointments"
+        )
+
+    # Cancel appointment
     appointments[appointment_id]["status"] = "cancelled"
     appointments[appointment_id]["cancelled_by"] = current_user["username"]
 

@@ -61,3 +61,18 @@
     A production system should use secure password hashing, database-backed users,
     token expiration, HTTPS, role-based access control, and secure authentication
     methods such as JWT.
+
+### Logout Explanation
+
+This API does not include a real logout endpoint because it uses a simple bearer token authentication system with fixed tokens stored in memory.
+
+In this implementation, tokens are not stored in a database or session store. Because of this, the server cannot "invalidate" a token once it has been issued.
+
+To "log out" in this system, the client simply stops using the token or removes it from storage (e.g., Swagger Authorize or frontend storage).
+
+In a production system, logout would typically work in one of the following ways:
+- Using JWT tokens with an expiration time
+- Implementing a token blacklist (revoking tokens server-side)
+- Using session-based authentication where sessions are destroyed on logout
+
+This ensures that logged-out users can no longer access protected endpoints.
